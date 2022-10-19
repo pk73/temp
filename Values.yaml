@@ -1,0 +1,781 @@
+USER-SUPPLIED VALUES:
+commandTimeOut: "1800"
+eric-cm-yang-provider:
+  cliExtensionCmds:
+    showAlarms:
+      enabled: true
+      host: eric-fh-alarm-handler:5006
+    showAlarmsHistory:
+      alarmLogPlane: adp-app-alarm-log
+      enabled: true
+      host: eric-data-search-engine:9200
+      httpsHost: eric-data-search-engine-tls:9200
+  service:
+    annotations:
+      sharedVIPLabel: pcc-oam
+    loadBalancerIP: 172.21.90.225
+eric-cnom-server:
+  service:
+    loadBalancerIP: 172.21.90.227
+    type: LoadBalancer
+eric-data-search-engine:
+  imageCredentials:
+    pullPolicy: IfNotPresent
+  jvmHeap:
+    ingest: 1024m
+  log:
+    outputs:
+    - stdout
+    - stream
+  persistence:
+    data:
+      persistentVolumeClaim:
+        size: 100Gi
+  replicaCount:
+    data: 2
+    ingest: 2
+  resources:
+    data:
+      limits:
+        cpu: 750m
+      requests:
+        cpu: 750m
+    ingest:
+      limits:
+        memory: 2Gi
+      requests:
+        memory: 2Gi
+  service:
+    endpoints:
+      rest:
+        tls:
+          enforced: optional
+          verifyClientCertificate: optional
+eric-data-search-engine-curator:
+  actions: |
+    1:
+      action: delete_indices
+      description: >-
+        Delete indices older than 7 days (based on index name), for pc-sm and
+        pc-mm prefixed indices. (Exclude pc-mm-worker-report-log, pc-mm-list-subscriber-result-log
+        and pc-mm-gf-imeicheck-log). Ignore the error if the filter does not result in an
+        actionable list of indices (ignore_empty_list) and exit cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^(pc-mm-.*|pc-sm-app)-log-.*$'
+      - filtertype: pattern
+        kind: regex
+        value: '^pc-mm-(worker-report|list-subscriber-result|gf-imeicheck)-log.*$'
+        exclude: True
+      - filtertype: age
+        source: name
+        direction: older
+        timestring: '%Y.%m.%d'
+        unit: days
+        unit_count: 7
+    2:
+      action: delete_indices
+      description: >-
+        Delete indices older than 1000 days (based on index name), for isp log
+        prefixed indices. Ignore the error if the filter does not result in
+        an actionable list of indices (ignore_empty_list) and exit cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^(pcc-isp-log).*$'
+      - filtertype: age
+        source: name
+        direction: older
+        timestring: '%Y.%m.%d'
+        unit: days
+        unit_count: 1000
+    3:
+      action: delete_indices
+      description: >-
+        Delete indices older than 24 hours (based on index name), for indices
+        that might contain sensitive information.
+        Ignore the error if the filter does not result in an actionable list
+        of indices(ignore_empty_list) and exit cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^pc-mm-(worker-report|list-subscriber-result|gf-imeicheck)-log.*$'
+      - filtertype: age
+        source: name
+        direction: older
+        timestring: '%Y.%m.%d'
+        unit: days
+        unit_count: 1
+    4:
+      action: delete_indices
+      description: >-
+        Delete indices older than 30 days (based on index name), for audit log
+        and alarm log prefixed indices. Ignore the error if the filter does
+        not result in an actionable list of indices (ignore_empty_list) and exit cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^(adp-app-audit-logs|adp-app-alarm-log).*$'
+      - filtertype: age
+        source: name
+        direction: older
+        timestring: '%Y.%m.%d'
+        unit: days
+        unit_count: 30
+    5:
+      action: delete_indices
+      description: >-
+        Delete indices older than 7 days (based on index name), for common service.
+        Ignore the error if the filter does not result in an actionable list of
+        indices (ignore_empty_list) and exit cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^(adp-app-logs|cnom-app-log|pcc-kcdbrd-app-log).*$'
+      - filtertype: age
+        source: name
+        direction: older
+        timestring: '%Y.%m.%d'
+        unit: days
+        unit_count: 7
+    6:
+      action: delete_indices
+      description: >-
+        Delete older indices when the total space is greater than upper limit, for pc-mm and
+        pc-sm prefixed indices. Ignore the error if the filter does not result in an
+        actionable list of indices (ignore_empty_list) and exit cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^(pc-mm-.*|pc-sm-app)-log.*$'
+      - filtertype: space
+        disk_space: 30
+        use_age: true
+        source: creation_date
+    7:
+      action: delete_indices
+      description: >-
+        Delete older indices when the total space is greater than upper limit, for isp log
+        prefixed indices. Ignore the error if the filter does not result in an
+        actionable list of indices (ignore_empty_list) and exit cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^(pcc-isp-log).*$'
+      - filtertype: space
+        disk_space: 1
+        use_age: true
+        source: creation_date
+    8:
+      action: delete_indices
+      description: >-
+        Delete older indices when the total space is greater than upper limit, for audit log
+        and alarm log prefixed indices. Ignore the error if the filter does not result in an
+        actionable list of indices (ignore_empty_list) and exit cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^(adp-app-audit-logs|adp-app-alarm-log).*$'
+      - filtertype: space
+        disk_space: 1
+        use_age: true
+        source: creation_date
+    9:
+      action: delete_indices
+      description: >-
+        Delete older indices when the total space is greater than upper limit, for common service
+        prefixed indices. Ignore the error if the filter does not result in an
+        actionable list of indices (ignore_empty_list) and exit cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^(adp-app-logs|cnom-app-log|pcc-kvdbrd-app-log).*$'
+      - filtertype: space
+        disk_space: 90
+        use_age: true
+        source: creation_date
+eric-data-sftp-server:
+  service:
+    annotations:
+      sharedVIPLabel: pcc-oam
+    loadBalancerIP: 172.21.90.225
+eric-fh-snmp-alarm-provider:
+  nodeSelector:
+    nodetype: 5gsa-toruonvp-iot02-pcc
+  service:
+    annotations:
+      sharedVIPLabel: pcc-oam
+    loadBalancerIP: 172.21.90.225
+eric-lm-combined-server:
+  licenseServerClient:
+    licenseServer:
+      thrift:
+        host: 172.21.223.124
+        port: 9095
+eric-log-shipper:
+  logLevel: warning
+  logshipper:
+    cfgData: |
+      paths:
+        - /var/log/containers/eric-pc-sm-*_torueiotpcc02_*.log
+      tags: ["daemonset", "json-in-log"]
+      fields:
+        logplane: pc-sm-app-log
+      symlinks: true
+
+      paths:
+        - /var/log/containers/eric-pc-routing-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-pc-networking-cm-agent-*_torueiotpcc02_*.log
+      tags: ["daemonset", "json-in-log"]
+      fields:
+        logplane: pc-routing-app-log
+      symlinks: true
+
+      paths:
+        - /var/log/containers/eric-cnom-server-*_torueiotpcc02_*.log
+      tags: ["daemonset", "json-in-log"]
+      fields:
+        logplane: cnom-app-log
+      symlinks: true
+
+      paths:
+        # Note that these are not regexps but Go globs. In particular,
+        # [0-9]* means "a digit followed by a sequence of characters".
+        - /var/log/containers/eric-pc-mm-controller-[0-9]*_torueiotpcc02_*.log
+        - /var/log/containers/eric-pc-mm-forwarder-[0-9]*_torueiotpcc02_*.log
+        - /var/log/containers/eric-pc-mm-mobility-[0-9]*_torueiotpcc02_*.log
+        - /var/log/containers/eric-pc-mm-sctp-[0-9]*_torueiotpcc02_*.log
+      tags: ["daemonset", "json-in-log"]
+      symlinks: true
+
+      # These containers/microservices do not follow the ADP Design rules
+      # to log directly as JSON.
+
+      paths:
+        - /var/log/containers/eric-pc-mm-*_torueiotpcc02_*.log
+      exclude_files:
+        - 'eric-pc-mm-(controller|forwarder|mobility|sctp)-[0-9]+_.*\.log'
+      tags: ["daemonset"]
+      fields:
+        logplane: pc-mm-app-log
+      symlinks: true
+
+      paths:
+        - /var/log/containers/eric-pc-kvdb-rd-*_torueiotpcc02_*.log
+      exclude_files:
+        - 'eric-pc-kvdb-rd-operator.*_eric-pc-kvdb-rd-logcar-.*\.log'
+      tags: ["daemonset"]
+      fields:
+        logplane: pcc-kvdbrd-app-log
+      symlinks: true
+
+      paths:
+        - /var/log/containers/eric-pc-kvdb-rd-*_torueiotpcc02_*_eric-pc-kvdb-rd-logcar-*.log
+      tags: ["daemonset", "json-in-log"]
+      fields:
+        logplane: pcc-kvdbrd-app-log
+      symlinks: true
+
+      paths:
+        - /var/log/containers/eric-cnom-*_torueiotpcc02_*.log
+      tags: ["daemonset"]
+      fields:
+        logplane: cnom-app-log
+      symlinks: true
+
+      paths:
+        - /var/log/containers/eric-pc-vpn-gw-*_torueiotpcc02_*.log
+      tags: ["daemonset", "json-in-log", "vpn-gw"]
+      fields:
+        logplane: vpn-gw-app-log
+      symlinks: true
+
+      # Set alarm handler logs with tag "json-in-log"
+      # in order to parse json content and separate alarm
+      # history logs on logstash. And keep other logs on
+      # adp-app-logs log plane.
+
+      paths:
+        - /var/log/containers/eric-cm-yang-provider-*_torueiotpcc02_*yang-db-adapter-*.log
+        - /var/log/containers/eric-fh-alarm-handler-*.log
+      tags: ["daemonset", "json-in-log"]
+      fields:
+        logplane: adp-app-logs
+      symlinks: true
+
+      paths:
+        - /var/log/containers/eric-pm-server-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-pm-bulk-reporter-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-pc-pm-init-job-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-cm-mediator-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-data-document-database-pg-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-cm-yang-provider-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-sw-inventory-manager-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-data-sftp-server-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-cnom-document-database-mg-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-data-coordinator-zk-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-data-message-bus-kf-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-cnom-document-database-mg-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-fh-snmp-alarm-provider-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-log-shipper-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-log-transformer-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-data-search-engine-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-odca-diagnostic-data-collector-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-sec-sip-tls-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-sec-certm-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-sec-key-management-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-data-distributed-coordinator-ed-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-sec-ldap-server-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-sec-admin-user-management-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-data-object-storage-mn-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-ctrl-bro-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-probe-event-report-broker-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-probe-virtual-tap-broker-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-lm-combined-server-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-pc-up-partitioner-*_torueiotpcc02_*.log
+        - /var/log/containers/eric-pc-up-timer-wheel-*_torueiotpcc02_*.log
+      exclude_files:
+        - 'eric-cm-yang-provider-.*yang-db-adapter-.*\.log'
+      tags: ["daemonset"]
+      fields:
+        logplane: adp-app-logs
+      symlinks: true
+    cfgDataInputType: container
+  nodeSelector:
+    nodetype: 5gsa-toruonvp-iot02-pcc
+eric-log-transformer:
+  config:
+    filebeat:
+      input:
+        filter: |
+          # These log events are from daemonset log shipper.
+          if "daemonset" in [tags] {
+            grok {
+              match => {
+                "[log][file][path]" => "/var/log/containers/%{DATA:pod_name}_%{DATA:namespace}_%{GREEDYDATA:container_name}-%{DATA:container_id}.log"
+              }
+              remove_field => ["log"]
+            }
+
+            # json-in-log is in tags if message filed follow the ADP Design rules
+            # Handle them by parsing the content of the message field.
+            if "json-in-log" in [tags] {
+              json {
+                skip_on_invalid_json => true
+                source => "[message]"
+                remove_field => ["stream"]
+              }
+            }
+            # logs from pods that do not follow the ADP Design rules
+            # force conversion to fit the ADP design rules.
+            if [stream] {
+              mutate {
+                rename => {"[stream]" => "[severity]"}
+                add_field => {"[version]" => "0.3.0"}
+                copy => { "@timestamp" => "timestamp" }
+                add_tag => [ "forced_conversion" ]
+              }
+              if [severity] == "stderr" {
+                mutate {
+                  replace => {"[severity]" => "error"}
+                }
+              } else if [severity] == "stdout" {
+                mutate {
+                  replace => {"[severity]" => "info"}
+                }
+              }
+              if ![service_id]{
+                mutate {
+                  copy => {"[container_name]" => "[service_id]"}
+                }
+              }
+            }
+          }
+          # The log events with DR are from sidecar log shipper.
+          else if [json][message] and [json][severity] and [json][service_id] and [json][version] and [json][timestamp] {
+            ruby {
+              code => "
+                event.get('json').each {|k, v|
+                    event.set(k, v)
+                }
+                event.remove('json')
+              "
+            }
+          }
+          # Logs without json and DR. The fields need to be renamed or added to fit ADP DR.
+          else if ![json] {
+            # KVDB specific rules: copy container, pod and namespace names to appropriate
+            # fields to mimic output seen running without logshipper sidecar.
+            if [extra_data][container_name] and [filename] =~ "/logs/rd_" {
+              mutate {
+                copy => { "[extra_data][container_name]" => "[service_id]" }
+                add_field => { "pod_name" => "%{[kubernetes][pod][name]}" }
+                add_field => { "container_name" => "%{[extra_data][container_name]}" }
+                add_field => { "namespace" => "%{[kubernetes][namespace]}" }
+              }
+            } else {
+              mutate {
+                copy => { "[kubernetes][pod][name]" => "[service_id]" }
+              }
+            }
+            mutate {
+              copy => { "@timestamp" => "timestamp" }
+              add_field => { "severity" => "info" }
+              add_field => { "version" => "0.3.0" }
+              add_tag => [ "forced_conversion" ]
+            }
+          }
+          if [host]{
+            mutate {
+              remove_field => [ "host" ]
+            }
+          }
+          if [extra_data][asi][log_plane] == "alarm" {
+            mutate {
+              replace => { "logplane" => "adp-app-alarm-log" }
+            }
+          }
+
+          if [metadata][category] == "in-service performance" {
+            mutate {
+              replace => { "logplane" => "pcc-isp-log" }
+            }
+          }
+
+          if [facility] == "log audit" {
+            mutate {
+              replace => { "logplane" => "adp-app-audit-logs" }
+            }
+          }
+  egress:
+    syslog:
+      enabled: true
+      inclusions:
+      - field: '[facility]'
+        value: log audit
+      - field: '[facility]'
+        value: security/authorization messages
+      - field: '[facility]'
+        value: security/authorization
+      remoteHosts:
+      - host: 172.18.198.84
+        port: 514
+      - host: 172.25.143.84
+        port: 514
+      tls:
+        enabled: false
+  replicaCount: 2
+  searchengine:
+    logplaneConfig:
+    - field: '[service_id]'
+      newLogplane: adp-app-logs
+      value: eric-ctrl-bro
+    - field: '[facility]'
+      newLogplane: adp-app-audit-logs
+      value: log audit
+    - field: '[facility]'
+      newLogplane: adp-app-audit-logs
+      value: security/authorization messages
+    - field: '[facility]'
+      newLogplane: adp-app-audit-logs
+      value: security/authorization
+  service:
+    endpoints:
+      filebeat:
+        tls:
+          enforced: optional
+      jsonIn:
+        tls:
+          enforced: optional
+      syslogIn:
+        tls:
+          enforced: optional
+  syslog:
+    syslogLogplane: adp-app-audit-logs
+eric-odca-diagnostic-data-collector:
+  env:
+    sftpFileLocation: /files/torueiotsmf02
+    sftphost: 172.18.232.184:22
+  sftpCredentials:
+    password: EricssonDDC
+    username: ddcsftpuser
+eric-pc-controller-ldap-admin-creds:
+  adminCredentials:
+    adminpasswd: $6$1czICagEBfMjx/k4$RrkfhiFjobGLJ4BMu5kMC7UKzwuSyXyoiH7EJyyHIlNydxDi6o6gzp/w2XNVy6tOF.2cuMcwPajQPtgCWREj/.
+    adminuser: admin
+eric-pc-routing-engine:
+  interfaces:
+    cniNetPrefix: net
+    macvlan:
+    - master: bond2
+    type: macvlan
+eric-pc-sm:
+  eric-pc-kvdb-rd-server:
+    replicaCount: 6
+    resources:
+      node:
+        limits:
+          cpu: "1"
+          memory: 4Gi
+        requests:
+          cpu: "1"
+          memory: 4Gi
+  eric-pc-sm-br-agent:
+    resources:
+      limits:
+        cpu: 100m
+        memory: 2Gi
+      requests:
+        cpu: 100m
+        memory: 2Gi
+  eric-pc-sm-controller:
+    controller:
+      annotations: null
+      configMap: null
+      testing:
+        ingress:
+          enabled: false
+        loadBalancerIP: 172.21.90.226
+    hostname: torueiotsmf02
+    resources:
+      controller:
+        limits:
+          cpu: "1"
+          memory: 8Gi
+        requests:
+          cpu: "1"
+          memory: 8Gi
+  eric-pc-sm-diameter:
+    diameter:
+      replicaCount: 2
+  eric-pc-sm-http-client:
+    httpclient:
+      replicaCount: 1
+    resources:
+      httpclient:
+        limits:
+          cpu: "1"
+          memory: 8Gi
+        requests:
+          cpu: "1"
+          memory: 8Gi
+  eric-pc-sm-ip-allocator:
+    ipAllocator:
+      replicaCount: 1
+    resources:
+      ipallocator:
+        limits:
+          cpu: "1"
+          memory: 12Gi
+        requests:
+          cpu: "1"
+          memory: 12Gi
+  eric-pc-sm-notification-forwarder:
+    notifForwarder:
+      ingress:
+        enabled: false
+      loadBalancerIP:
+        namfNotification: 172.21.51.194
+        nchfNotification: 172.21.51.198
+        nnrfNotification: 172.21.51.197
+        npcfNotification: 172.21.51.196
+        nudmNotification: 172.21.51.195
+      replicaCount: 2
+    resources:
+      notifforwarder:
+        limits:
+          cpu: "1"
+          memory: 8Gi
+        requests:
+          cpu: "1"
+          memory: 8Gi
+  eric-pc-sm-nsmf-forwarder:
+    nsmfForwarder:
+      ingress:
+        enabled: false
+      loadBalancerIP:
+        nsmf: 172.21.51.193
+      replicaCount: 2
+    resources:
+      smf:
+        limits:
+          cpu: "1"
+          memory: 8Gi
+        requests:
+          cpu: "1"
+          memory: 8Gi
+  eric-pc-sm-sgw-session:
+    resources:
+      sgw:
+        limits:
+          cpu: "4"
+          memory: 12Gi
+        requests:
+          cpu: "4"
+          memory: 12Gi
+    sgw:
+      replicaCount: 2
+  eric-pc-sm-smf-pgw-session:
+    resources:
+      smf:
+        limits:
+          cpu: "4"
+          memory: 32Gi
+        requests:
+          cpu: "4"
+          memory: 32Gi
+    smf:
+      replicaCount: 2
+  eric-pc-sm-udp-forwarder:
+    forwarder:
+      ingress:
+        enabled: false
+      loadBalancerIP:
+        gns5s8: null
+      replicaCount: 1
+    resources:
+      udpforwarder:
+        limits:
+          cpu: "1"
+          memory: 8Gi
+        requests:
+          cpu: "1"
+          memory: 8Gi
+eric-pc-storage:
+  persistentVolumeClaim:
+    size: 30Gi
+    storageClassName: ocs-storagecluster-cephfs
+eric-pc-vpn-gw:
+  eric-pc-vpn-gw:
+    allowNetworkConfigChanges: true
+    interfaces:
+    - hostInterface: bond2
+      name: net0
+      type: macvlan
+    kernelIo:
+      ipv6:
+        enabled: true
+    resources:
+      dataPlane:
+        limits:
+          cpu: "2"
+          memory: 2Gi
+        requests:
+          cpu: "2"
+          memory: 2Gi
+    vpnGateway:
+      enabled: true
+      log:
+        payload: false
+        signaling: true
+eric-pm-bulk-reporter:
+  env:
+    nodeName: torueiotsmf02
+  objectStorage:
+    enabled: false
+  service:
+    annotations:
+      sharedVIPLabel: pcc-oam
+    loadBalancerIP: 172.21.90.225
+eric-pm-server:
+  rbac:
+    appMonitoring:
+      enabled: true
+    configFileCreate: false
+  server:
+    persistentVolume:
+      enabled: true
+global:
+  applicationId: torueiotsmf02
+  epg-pm:
+    enabled: false
+  ericsson:
+    licensing:
+      licenseDomains:
+      - customerId: "945447"
+        productType: PACKET_CORE_CONTROLLER
+        swltId: IOT-ARCH-LAB-PCC
+  pullSecret: torueiotsmf02
+  registry:
+    pullSecret: torueiotsmf02
+    url: docker-registry.evnfm-archlab.srbh.tlabs.ca
+  sm:
+    pgw:
+      enabled: true
+    sgw:
+      enabled: true
+    smf:
+      enabled: true
+imageCredentials:
+  pullSecret: torueiotsmf02
+  registry:
+    pullSecret: torueiotsmf02
+    url: docker-registry.evnfm-archlab.srbh.tlabs.ca
+tags:
+  brm: true
+  cm: true
+  cnom: true
+  controller-supervisor: false
+  data-sftp-server: true
+  ddc: true
+  eric-pc-mm: false
+  fm: true
+  log: true
+  mm-gtp-forwarder: false
+  object-storage-mn: true
+  pm-bulk-reporter: true
+  pm-server: true
+  probe: false
+  rs: true
+  sip-tls: true
+  sm: true
+  storage: false
+  swim: true
+  um: true
+  vpn-gw: true
