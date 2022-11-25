@@ -1,0 +1,1171 @@
+# All PCG micro services should use the PC kvdb server (name and port)
+global:
+  interfacePrefixes:
+  - name: "cre:"
+    owner: "cre"
+  - name: "up:"
+    owner: "up"
+  security:
+    tls:
+      enabled: true
+  # IMPORTANT: ApplicationId parameter must be configured/changed before
+  #            installation.  ApplicationId must be UNIQUE since external NF
+  #            (e.g. EEA, TMA, CNOM, ENM) use it to differentiate instances of
+  #            PCG.  Max length of applicationId is 32 characters, pattern
+  #            (^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$)
+  applicationId: "pcg-appid-example"
+  ericsson:
+    licensing:
+      licenseDomains:
+          # here just an invalid value incase LM crash with empty licenseDomains
+          # should be overwritten by official value when deployment
+      - productType: "PACKET_CORE_GATEWAY"
+        swltId: "Palaven"
+        customerId: "123456"
+  # control of pc up firewall deployment
+  pcfw:
+    enabled: false
+
+eric-pc-kvdb-rd-server:
+  enabled: true
+  resources:
+    node:
+      limits:
+        cpu: 1000m
+        memory: 3Gi
+      requests:
+        cpu: 250m
+        memory: 1Gi
+    metricExporter:
+      limits:
+        cpu: 100m
+        memory: 200Mi
+      requests:
+        cpu: 50m
+        memory: 100Mi
+  server:
+    maxMemory: 2415mb
+
+eric-pc-kvdb-rd-operator:
+  enabled: true
+  resources:
+    operator:
+      requests:
+        cpu: 250m
+        memory: 64Mi
+    logcar:
+      requests:
+        cpu: 1m
+        memory: 20Mi
+  notready:
+    tolerationSeconds: 60
+
+eric-pc-networking-cm-agent:
+  enabled: true
+
+eric-cnom-server:
+  enabled: true
+  legalNotice: |
+    IF YOU ARE NOT AN AUTHORIZED USER, PLEASE EXIT IMMEDIATELY
+
+    This system processes sensitive personal data. The misuse of such data may generate considerable harm to the data subjects. Be reminded of the confidentiality obligations you have when accessing this kind of data and the disciplinary consequences of improper handling.
+
+    Version: 1.1, Last Updated: 2020-11-10
+  service:
+    endpoints:
+      api:
+        tls:
+          verifyClientCertificate: optional
+          disableSipTls: true
+  authentication:
+    ldap:
+      enabled: true
+    local:
+      enabled: false
+  dashboards:
+    configMaps:
+    - eric-pc-gateway-cnom-server-dashboards
+  metrics:
+    hierarchy:
+      configMap: eric-pc-gateway-cnom-server-metric-hierarchy
+  features:
+    healthCheckViewer: true
+    metricViewer: true
+
+eric-cnom-document-database-mg:
+  enabled: true
+  resources:
+    requests:
+      memory: 320Mi
+      cpu: 50m
+
+# ADP Components
+eric-pm-server:
+  enabled: true
+  resources:
+    eric-pm-server:
+      limits:
+        memory: 4Gi
+        ephemeral-storage: 8Gi
+      requests:
+        memory: 2Gi
+  rbac:
+    appMonitoring:
+      enabled: true
+      configFileCreate: false
+  service:
+    endpoints:
+      scrapeTargets:
+        tls:
+          enforced: optional
+      reverseproxy:
+        tls:
+          enforced: optional
+          verifyClientCertificate: optional
+  server:
+    retention: 3d
+    configMapOverrideName: eric-pc-gateway-pm-server
+    persistentVolume:
+      enabled: false
+
+eric-pm-bulk-reporter:
+  enabled: true
+  userConfig:
+    ldap:
+      enabled: true
+      rolesConfig:
+        readOnlyGroup: system-read-only
+        readWriteGroup: system-admin,system-trace-admin
+  env:
+    iscompressed: 'true'
+  objectStorage:
+    enabled: true
+    secretName: eric-pc-gateway-obj-storage-secret
+  thresholdReporter:
+    enabled: true
+  tolerations:
+    eric-pm-bulk-reporter:
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 60
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 0
+
+eric-pm-resource-monitor:
+  enabled: true
+  metricConfig:
+    configmapName: "eric-pc-gateway-pmrm-metric-config"
+  objectStorage:
+    accessSecretName: "eric-pc-gateway-obj-storage-secret"
+
+
+eric-cm-mediator:
+  enabled: true
+  backend:
+    hostname: eric-data-document-database-pg-cm
+    dbuser: pg-custom-user
+  kafka:
+    hostname: eric-data-message-bus-kf-client
+  cmm:
+    kafkaProducerConfig: "{\"max_request_size\": 6291456}"
+  cmkey:
+    enable: true
+  dbbr:
+    backupType: "DEFAULT"
+  service:
+    endpoints:
+      restapi:
+        tls:
+          enforced: optional
+          verifyClientCertificate: optional
+  tolerations:
+    eric-cm-mediator-notifier:
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 60
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 0
+  resources:
+    eric-cm-mediator:
+      limits:
+        memory: "1Gi"
+
+eric-lm-combined-server:
+  enabled: true
+  database:
+    name: adp_gs_lm
+    userName: pg-custom-user
+    host: eric-data-document-database-pg-lm
+  licenseServerClient:
+    licenseServer:
+      thrift:
+        host:
+  tolerations:
+    licenseServerClient:
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 60
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 0
+
+eric-data-distributed-coordinator-ed:
+  enabled: true
+  persistence:
+    persistentVolumeClaim:
+      size: 512Mi
+      storageClassName: ""
+  brAgent:
+    enabled: true
+    brLabelValue: "ddced-agent"
+    backupTypeList:
+    - DEFAULT
+    properties:
+      applicationProperties: |-
+        dced.agent.restore.type=overwrite
+        dced.excluded.paths=/shelter,/kms/core/lock
+        dced.included.paths=
+  service:
+    endpoints:
+      dced:
+        metrics:
+          enabled: false
+        acls:
+          adminSecret: eric-pc-gateway-data-distributed-coordinator-ed-secret
+  tolerations:
+    brAgent:
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 60
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 0
+
+eric-data-document-database-pg-cm:
+  enabled: true
+  postgresDatabase: adp_gs_cm
+  postgresConfig:
+    huge_pages: "off"
+    max_connections: 200
+  brAgent:
+    enabled: true
+    logicalDBBackupEnable: true
+    backupDataModelConfig: eric-cm-mediator-br-agent
+    backupTypeList:
+    - "DEFAULT"
+  resources:
+    postgres:
+      requests:
+        cpu: 250m
+  tolerations:
+    brAgent:
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 60
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 0
+
+# A postgres instance for alarm handler
+eric-data-document-database-pg-ah:
+  enabled: true
+  postgresDatabase: adp_gs_ah
+  postgresConfig:
+    huge_pages: "off"
+  resources:
+    postgres:
+      requests:
+        cpu: 250m
+
+eric-data-document-database-pg-lm:
+  enabled: true
+  postgresDatabase: adp_gs_lm
+  postgresConfig:
+    huge_pages: "off"
+  resources:
+    postgres:
+      requests:
+        cpu: 250m
+
+eric-pc-firewall-coordinator-at:
+  enabled: false
+
+eric-log-shipper:
+  enabled: true
+  logLevel: "warning"
+  logshipper:
+    cfgDataInputType: container
+    cfgData: |
+      paths:
+        # These containers/microservices properly follow the ADP Design rules
+        # to log directly as JSON. The added tag 'json-in-log' is added to
+        # indicate this. Also notice that we do not use keys_under_root or
+        # overwrite_keys here. This lets us remove the intermediate data more
+        # easily later.
+        - /var/log/containers/eric-cm-mediator-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-cm-yang-provider-*_.RELEASE.NAMESPACE_cli-extension-cmds-*.log
+        - /var/log/containers/eric-cm-yang-provider-*_.RELEASE.NAMESPACE_notification-controller-*.log
+        - /var/log/containers/eric-cm-yang-provider-*_.RELEASE.NAMESPACE_schema-synchronizer-*.log
+        - /var/log/containers/eric-cm-yang-provider-*_.RELEASE.NAMESPACE_sshd-*.log
+        - /var/log/containers/eric-cm-yang-provider-*_.RELEASE.NAMESPACE_yang-db-adapter-*.log
+        - /var/log/containers/eric-cnom-server-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-ctrl-bro-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-data-distributed-coordinator-ed-agent-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-data-document-database-pg-*-bragent-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-data-object-storage-mn-*_.RELEASE.NAMESPACE_manager-*.log
+        - /var/log/containers/eric-data-search-engine-*_.RELEASE.NAMESPACE_tlsproxy-*.log
+        - /var/log/containers/eric-data-search-engine-curator-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-fh-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-lm-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-log-transformer-*_.RELEASE.NAMESPACE_metrics-*.log
+        - /var/log/containers/eric-log-transformer-*_.RELEASE.NAMESPACE_tlsproxy-*.log
+        - /var/log/containers/eric-odca-diagnostic-data-collector-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-pc-firewall-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-pc-kvdb-rd-operator-*_.RELEASE.NAMESPACE_eric-pc-kvdb-rd-logcar-*.log
+        - /var/log/containers/eric-pc-networking-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-pc-routing-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-pc-up-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-pm-bulk-reporter-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-pm-resource-monitor-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-pm-server-*_.RELEASE.NAMESPACE_eric-pm-exporter-*.log
+        - /var/log/containers/eric-pm-server-*_.RELEASE.NAMESPACE_eric-pm-initcontainer-*.log
+        - /var/log/containers/eric-pm-server-*_.RELEASE.NAMESPACE_eric-pm-reverseproxy-*.log
+        - /var/log/containers/eric-probe-event-report-broker-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-sec-admin-user-management-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-sec-certm-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-sec-ldap-server-proxy-*_.RELEASE.NAMESPACE_*.log
+        - /var/log/containers/eric-sec-sip-tls-*_.RELEASE.NAMESPACE_*.log
+      tags: ["daemonset", "json-in-log"]
+      fields:
+        logplane: adp-app-logs
+      symlinks: true
+
+      # These containers/microservices do not follow the ADP Design rules
+      # to log directly as JSON.
+      paths:
+        - /var/log/containers/eric-*_.RELEASE.NAMESPACE_*.log
+      exclude_files:
+        - 'eric-cm-mediator-.*\.log'
+        - 'eric-cm-yang-provider-.*_cli-extension-cmds-.*\.log'
+        - 'eric-cm-yang-provider-.*_notification-controller-.*\.log'
+        - 'eric-cm-yang-provider-.*_schema-synchronizer-.*\.log'
+        - 'eric-cm-yang-provider-.*_sshd-.*\.log'
+        - 'eric-cm-yang-provider-.*_yang-db-adapter-.*\.log'
+        - 'eric-cnom-server.*\.log'
+        - 'eric-ctrl-bro.*\.log'
+        - 'eric-data-distributed-coordinator-ed-agent-.*\.log'
+        - 'eric-data-document-database-pg-.*-bragent-.*\.log'
+        - 'eric-data-object-storage-mn-.*_manager-.*\.log'
+        - 'eric-data-search-engine-.*_tlsproxy-.*\.log'
+        - 'eric-data-search-engine-curator-.*\.log'
+        - 'eric-epg-.*\.log'
+        - 'eric-fh-.*\.log'
+        - 'eric-lm-.*\.log'
+        - 'eric-log-transformer-.*_metrics-.*\.log'
+        - 'eric-log-transformer-.*_tlsproxy-.*\.log'
+        - 'eric-odca-diagnostic-data-collector-.*\.log'
+        - 'eric-pc-.*\.log'
+        - 'eric-pccsm.*\.log'
+        - 'eric-pm-bulk-reporter-.*\.log'
+        - 'eric-pm-resource-monitor-.*\.log'
+        - 'eric-pm-server-.*_eric-pm-exporter-.*\.log'
+        - 'eric-pm-server-.*_eric-pm-initcontainer-.*\.log'
+        - 'eric-pm-server-.*_eric-pm-reverseproxy-.*\.log'
+        - 'eric-probe-event-report-broker-.*\.log'
+        - 'eric-sec-admin-user-management-.*\.log'
+        - 'eric-sec-certm-.*\.log'
+        - 'eric-sec-ldap-server-proxy-.*\.log'
+        - 'eric-sec-sip-tls-.*\.log'
+        - 'eric-sw-inventory-.*\.log'
+        - 'eric-tm-.*\.log'
+      tags: ["daemonset"]
+      fields:
+        logplane: adp-app-logs
+      symlinks: true
+      multiline.pattern: '^[[:space:]]+(at|\.{3})|^Caused by:|^java|^io'
+      multiline.negate: false
+      multiline.match: after
+  additionalVolumes: |
+    - name: docker-containers
+      hostPath:
+        path: /var/lib/docker/containers
+    - name: kubernetes-pods
+      hostPath:
+        path: /var/log/pods
+    - name: kubernetes-containers
+      hostPath:
+        path: /var/log/containers
+  additionalVolumeMounts: |
+    - name: docker-containers
+      mountPath: /var/lib/docker/containers
+    - name: kubernetes-pods
+      mountPath: /var/log/pods
+    - name: kubernetes-containers
+      mountPath: /var/log/containers
+
+eric-log-transformer:
+  enabled: true
+  replicaCount: 2
+  resources:
+    logtransformer:
+      limits:
+        cpu: 1500m
+  searchengine:
+    logplaneConfig:
+    - field: "[facility]"
+      value: "log audit"
+      newLogplane: "adp-app-audit-logs"
+    - field: "[extra_data][asi][log_plane]"
+      value: "alarm"
+      newLogplane: "adp-app-asi-logs"
+    - field: "[severity]"
+      value: "debug"
+      newLogplane: "adp-app-debug-logs"
+    - field: "[metadata][category]"
+      value: "in-service performance"
+      newLogplane: "isp-logs"
+    - field: "[facility]"
+      value: "security/authorization messages"
+      newLogplane: "adp-app-security-logs"
+    exclusions:
+    - field: "[facility]"
+      value: "local3"
+  egress:
+    syslog:
+      inclusions:
+      - field: "[facility]"
+        value: "log audit"
+      - field: "[facility]"
+        value: "local3"
+      - field: "[facility]"
+        value: "security/authorization messages"
+  config:
+    adpJson:
+      validation:
+        enabled: false
+      transformation:
+        enabled: false
+    filebeat:
+      input:
+        filter: |
+          # These log events are from daemonset log shipper.
+          if "daemonset" in [tags] {
+            grok {
+              match => {
+                "[log][file][path]" => "/var/log/containers/%{DATA:pod_name}_%{DATA:namespace}_%{GREEDYDATA:container_name}-%{DATA:container_id}.log"
+              }
+              remove_field => ["log"]
+            }
+
+            # json-in-log is in tags if message filed follow the ADP Design rules
+            # Handle them by parsing the content of the message field.
+            if "json-in-log" in [tags] {
+              json {
+                skip_on_invalid_json => true
+                source => "[message]"
+                remove_field => ["stream"]
+              }
+            }
+            # logs from pods that do not follow the ADP Design rules
+            # force conversion to fit the ADP design rules.
+            if [stream] {
+              mutate {
+                rename => {"[stream]" => "[severity]"}
+                add_field => {"[version]" => "0.3.0"}
+                copy => { "@timestamp" => "timestamp" }
+                add_tag => [ "forced_conversion" ]
+              }
+              if [severity] == "stderr" {
+                # DCED Specific rules: change service id to eric-data-distributed-coordinator-ed and
+                # set severity to warning instead of error
+                if [container_name] == "dced" {
+                  mutate {
+                    replace => {"[container_name]" => "eric-data-distributed-coordinator-ed"}
+                    replace => {"[severity]" => "warning"}
+                  }
+                } else if [container_name] == "datacoordinatorzk" {
+                  mutate {
+                    replace => {"[container_name]" => "eric-data-coordinator-zk"}
+                    replace => {"[severity]" => "warning"}
+                  }
+                } else {
+                  mutate {
+                    replace => {"[severity]" => "error"}
+                  }
+                }
+              } else if [severity] == "stdout" {
+                mutate {
+                  replace => {"[severity]" => "info"}
+                }
+              }
+              mutate {
+                copy => {"[container_name]" => "[service_id]"}
+              }
+            }
+          }
+
+          # The log events with DR are from sidecar log shipper.
+          else if [json][message] and [json][severity] and [json][service_id] and [json][version] and [json][timestamp] {
+            ruby {
+              code => "
+                event.get('json').each {|k, v|
+                    event.set(k, v)
+                }
+                event.remove('json')
+              "
+            }
+          }
+
+          # Logs without json and DR. The fields need to be renamed or added to
+          # fit ADP DR.
+          else if ![json] {
+            mutate {
+              copy => { "[kubernetes][pod][name]" => "[service_id]" }
+              copy => { "@timestamp" => "timestamp" }
+              add_field => { "severity" => "info" }
+              add_field => { "version" => "0.3.0" }
+              add_tag => [ "forced_conversion" ]
+            }
+          }
+
+          if [host] {
+            mutate {
+              remove_field => ["host"]
+            }
+          }
+
+eric-data-search-engine:
+  autoSetRequiredWorkerNodeSysctl: true
+  enabled: true
+  replicaCount:
+    ingest: 2
+  persistence:
+    data:
+      persistentVolumeClaim:
+        size: "5Gi"
+  resources:
+    data:
+      limits:
+        memory: "3Gi"
+        cpu: "750m"
+    master:
+      limits:
+        cpu: "750m"
+    ingest:
+      limits:
+        cpu: "750m"
+  livenessProbe:
+    tlsproxy:
+      timeoutSeconds: 15
+
+eric-data-search-engine-curator:
+  enabled: true
+  resources:
+    curator:
+      requests:
+        memory: 90Mi
+        cpu: 90m
+  cronjob:
+    curator:
+      schedule: "0 * * * *"
+  actions: |
+    1:
+      action: delete_indices
+      description: >-
+        Delete indices older than 7 days (based on index name), for systemlog
+        prefixed indices. Ignore the error if the filter does not result in an
+        actionable list of indices (ignore_empty_list) and exit cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^adp-app-logs.*$'
+      - filtertype: age
+        source: field_stats
+        direction: older
+        field: '@timestamp'
+        stats_result: max_value
+        unit: days
+        unit_count: 7
+    2:
+      action: delete_indices
+      description: >-
+        Delete older indices when the total space is greater than upper limit,
+        for systemlog prefixed indices. Ignore the error if the filter does not
+        result in an actionable list of indices (ignore_empty_list) and exit
+        cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^adp-app-logs.*$'
+      - filtertype: space
+        disk_space: 3
+        use_age: true
+        source: creation_date
+    3:
+      action: delete_indices
+      description: >-
+        Remove alarm, audit and security logs when the total space is greater
+        than the upper limit.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^adp-app-(audit|asi|security)-logs.*$'
+      - filtertype: space
+        disk_space: 1
+        use_age: true
+        source: creation_date
+    4:
+      action: delete_indices
+      description: >-
+        Delete indices older than 1000 days (based on index name), for isp log
+        prefixed indices. Ignore the error if the filter does not result in
+        an actionable list of indices (ignore_empty_list) and exit cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^(isp-logs).*$'
+      - filtertype: age
+        source: field_stats
+        direction: older
+        field: '@timestamp'
+        stats_result: max_value
+        unit: days
+        unit_count: 1000
+    5:
+      action: delete_indices
+      description: >-
+        Delete older indices when the total space is greater than upper limit,
+        for isp log prefixed indices. Ignore the error if the filter does not
+        result in an actionable list of indices (ignore_empty_list) and exit
+        cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^(isp-logs).*$'
+      - filtertype: space
+        disk_space: 1
+        use_age: true
+        source: creation_date
+    6:
+      action: delete_indices
+      description: >-
+        Delete indices older than 1 day (based on index name), for debug log
+        indices. Ignore the error if the filter does not result in an
+        actionable list of indices (ignore_empty_list) and exit cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^adp-app-debug-logs.*$'
+      - filtertype: age
+        source: field_stats
+        direction: older
+        field: '@timestamp'
+        stats_result: max_value
+        unit: days
+        unit_count: 1
+    7:
+      action: delete_indices
+      description: >-
+        Delete older indices when the total space is greater than upper limit,
+        for debug log prefixed indices. Ignore the error if the filter does not
+        result in an actionable list of indices (ignore_empty_list) and exit
+        cleanly.
+      options:
+        ignore_empty_list: True
+        timeout_override:
+        continue_if_exception: False
+        disable_action: False
+      filters:
+      - filtertype: pattern
+        kind: regex
+        value: '^adp-app-debug-logs.*$'
+      - filtertype: space
+        disk_space: 1
+        use_age: true
+        source: creation_date
+
+eric-cm-yang-provider:
+  enabled: true
+  resources:
+    yangDbAdapter:
+      limits:
+        memory: 512Mi
+      requests:
+        memory: 250Mi
+    pmMetrics:
+      limits:
+        memory: 1Gi
+      requests:
+        memory: 250Mi
+    sshd:
+      limits:
+        memory: 350Mi
+  externaldb:
+    host: eric-data-document-database-pg-cm
+    user: ''
+    password: ''
+    dbuser: pg-custom-user
+  persistentVolumeClaim:
+    sshKeyPvc:
+      size: 10Mi
+  objectStorage:
+    enableImportExportCommands: true
+    secretName: eric-pc-gateway-obj-storage-secret
+  rollback:
+    enableRollbackCommands: true
+    numberOfRollbacksToStore: 50
+  cliExtensionCmds:
+    showAlarms:
+      enabled: true
+    showAlarmsHistory:
+      enabled: true
+  isCandidateEnabled: true
+
+eric-data-coordinator-zk:
+  enabled: true
+  probes:
+    datacoordinatorzk:
+      livenessProbe:
+        initialDelaySeconds: 240
+  resources:
+    datacoordinatorzk:
+      requests:
+        cpu: 300m
+        memory: 1Gi
+  persistence:
+    persistentVolumeClaim:
+      storageClassName: ""
+
+eric-data-message-bus-kf:
+  enabled: true
+  persistence:
+    persistentVolumeClaim:
+      enabled: false
+      storageClassName: ""
+  jmx:
+    enabled: false
+  service:
+    endpoints:
+      messagebuskf:
+        tls:
+          enforced: "optional"
+  livenessProbeTcpSocketCheck: true
+
+eric-fh-alarm-handler:
+  enabled: true
+  backend:
+    hostname: eric-data-document-database-pg-ah
+  alarmhandler:
+    configmap:
+      faultmappings: eric-pc-gateway-alarm-handler-faultmappings
+
+eric-fh-snmp-alarm-provider:
+  enabled: true
+  service:
+    secretName: eric-pc-gateway-snmp-alarm-provider-config
+  tolerations:
+    snmpAP:
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 60
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 0
+
+snmp-alarm-provider-secret-creation:
+  enabled: true
+
+eric-sec-certm:
+  enabled: true
+  tolerations:
+    eric-sec-certm:
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 60
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 0
+
+eric-sec-sip-tls:
+  enabled: true
+  keyManagement:
+    port: 8210
+  tolerations:
+  - key: node.kubernetes.io/not-ready
+    operator: Exists
+    effect: NoExecute
+    tolerationSeconds: 60
+  - key: node.kubernetes.io/unreachable
+    operator: Exists
+    effect: NoExecute
+    tolerationSeconds: 0
+
+eric-sec-key-management:
+  enabled: true
+  replicas: 2
+  shelter:
+    enabled: true
+  resources:
+    vault:
+      requests:
+        cpu: 200m
+    shelter:
+      requests:
+        cpu: 200m
+  tolerations:
+  - key: node.kubernetes.io/not-ready
+    operator: Exists
+    effect: NoExecute
+    tolerationSeconds: 60
+  - key: node.kubernetes.io/unreachable
+    operator: Exists
+    effect: NoExecute
+    tolerationSeconds: 0
+
+eric-data-object-storage-mn:
+  enabled: true
+  server:
+    resources:
+      requests:
+        memory: 2Gi
+        cpu: 250m
+      limits:
+        memory: 8Gi
+        cpu: 500m
+  persistentVolumeClaim:
+    size: 8Gi
+  credentials:
+    kubernetesSecretName: "eric-pc-gateway-obj-storage-secret"
+
+  ## Specify the user lifecycle of buckets configuration bash shell file.
+  objects_lifecycle_cfg: |
+    #!/bin/bash
+    mc mb $MC_HOST/coredump
+    eosc set life-cycle-rule bucket coredump expire 7 --lfstatus=Enabled
+    mc mb $MC_HOST/heuristics
+    mc mb $MC_HOST/itc
+    eosc set life-cycle-rule bucket itc expire 1 --lfstatus=Enabled
+
+eric-ctrl-bro:
+  enabled: true
+  resources:
+    backupAndRestore:
+      requests:
+        cpu: 200m
+        memory: 1Gi
+  bro:
+    enableAgentDiscovery: true
+    enableConfigurationManagement: true
+  # Workaround for GSSUPP-1706.
+  probes:
+    backupAndRestore:
+      livenessProbe:
+        initialDelaySeconds: 240
+      readinessProbe:
+        initialDelaySeconds: 30
+  persistence:
+    persistentVolumeClaim:
+      size: 5Gi
+  kafka:
+    hostname: eric-data-message-bus-kf
+
+eric-odca-diagnostic-data-collector:
+  enabled: true
+  resources:
+    diagnostic-data-collector:
+      requests:
+        memory: 300Mi
+        cpu: 200m
+        ephemeral-storage: 8Gi
+      limits:
+        memory: 1Gi
+        cpu: 1000m
+        ephemeral-storage: 20Gi
+    diagnostic-data-collector-manual:
+      requests:
+        memory: 300Mi
+        cpu: 200m
+        ephemeral-storage: 8Gi
+      limits:
+        memory: 1Gi
+        cpu: 1000m
+        ephemeral-storage: 20Gi
+  env:
+    window: 15
+    interval: 15
+    collectDelayMinutes: 5
+    enableFixedFiles: true
+    fixedFileCollectorLocations:
+    - eric-cm-yang-provider-bucket/ericsson.xml
+    enableFileCollector: true
+    logIndices:
+    - adp-app-asi-logs*
+    - adp-app-audit-logs*
+    - adp-app-logs*
+    - adp-app-debug-logs*
+    - adp-app-security-logs*
+    - isp-logs*
+    fileCollectorLocations:
+    - coredump/core
+    - eric-pmbr-rop-file-store
+    - a10net
+    enableCmConfig: true
+    enableCmypConfig: true
+    enableKubernetesInfoCollector: true
+    enableSwICollector: true
+  kubernetesInfo:
+    enabled: true
+  swim:
+    enabled: true
+  sftpCredentials:
+    enabled: true
+    secretName: eric-pc-gateway-ddc-sftp-secret
+    publicKey: 'feedc0de'
+    username: 'username'
+    password: 'password'
+  objectStorage:
+    enabled: true
+    secretName: eric-pc-gateway-obj-storage-secret
+  kms:
+    enabled: true
+
+eric-pc-routing-engine:
+  enabled: true
+  objectStorage:
+    enabled: true
+    accessSecretName: "eric-pc-gateway-obj-storage-secret"
+
+eric-pc-routing-engine-api:
+  enabled: true
+  objectStorage:
+    enabled: true
+    accessSecretName: "eric-pc-gateway-obj-storage-secret"
+
+eric-pc-up-br-agent:
+  enabled: true
+
+eric-pc-up-data-plane:
+  enabled: true
+  objectStorage:
+    accessSecretName: "eric-pc-gateway-obj-storage-secret"
+  messageBus:
+    msgSizeConfig: "6291456"
+  productVersionConfigMap:
+    name: eric-pc-gateway-version
+
+eric-pc-up-pfcp-endpoint:
+  enabled: true
+  objectStorage:
+    accessSecretName: "eric-pc-gateway-obj-storage-secret"
+  messageBus:
+    msgSizeConfig: "6291456"
+  productVersionConfigMap:
+    name: eric-pc-gateway-version
+
+eric-pc-up-timer-wheel:
+  enabled: true
+  objectStorage:
+    enabled: true
+    accessSecretName: "eric-pc-gateway-obj-storage-secret"
+
+eric-pc-routing-aggregator:
+  enabled: true
+  objectStorage:
+    enabled: true
+    accessSecretName: "eric-pc-gateway-obj-storage-secret"
+
+eric-pc-up-partitioner:
+  enabled: true
+  objectStorage:
+    enabled: true
+    accessSecretName: "eric-pc-gateway-obj-storage-secret"
+
+eric-pc-up-user-plane-cm-agent:
+  enabled: true
+  objectStorage:
+    enabled: true
+    accessSecretName: "eric-pc-gateway-obj-storage-secret"
+
+eric-pc-up-service-chaining-cm-agent:
+  enabled: true
+  objectStorage:
+    enabled: true
+    accessSecretName: "eric-pc-gateway-obj-storage-secret"
+
+# S3 compatible SFTP Server. It uses Object Storage as backend.
+# TLS is enabled by default.
+eric-data-sftp-server:
+  enabled: true
+  objectStorage:
+    accessSecretName: "eric-pc-gateway-obj-storage-secret"
+  configuration:
+    bucket_policy: >-
+      system-troubleshooter coredump r:
+      up-troubleshooter coredump r:
+
+      up-admin heuristics rw:
+      up-operator heuristics rw:
+      up-troubleshooter heuristics r:
+
+      system-trace-admin itc rw:
+      system-troubleshooter itc r:
+      up-trace-admin itc r:
+      up-troubleshooter itc r:
+
+      system-trace-admin eric-pmbr-rop-file-store rw:
+
+      system-trace-admin uetrace r:
+      system-troubleshooter uetrace r:
+      up-trace-admin uetrace r:
+      up-troubleshooter uetrace r
+    object_policy: ""
+    default_bucket_policy: >-
+      system-admin * rw:
+      system-security-admin * rw:
+      system-read-only * r:
+      * * none
+  privacy_notice_file: |
+    IF YOU ARE NOT AN AUTHORIZED USER, PLEASE EXIT IMMEDIATELY
+
+    This system processes sensitive personal data. The misuse of such data may
+    generate considerable harm to the data subjects. Be reminded of the
+    confidentiality obligations you have when accessing this kind of data and
+    the disciplinary consequences of improper handling.
+
+    Version: 1.1, Last Updated: 2020-11-10
+
+eric-sec-admin-user-management:
+  enabled: true
+  notices:
+    # The legal notice presented to the user when starting a session. The
+    # message is presented to the client before authentication takes
+    # place. Depends on the client capability and configuration if the
+    # message is presented to the user. The user receives this
+    # information before authentication. The purpose of the message is to
+    # warn the user about the consequences of unauthorized access.
+    legal: "IF YOU ARE NOT AN AUTHORIZED USER, PLEASE EXIT IMMEDIATELY"
+    # The privacy notice presented to the user.
+    privacy: |
+      This system processes sensitive personal data. The misuse of such data may
+      generate considerable harm to the data subjects. Be reminded of the
+      confidentiality obligations you have when accessing this kind of data and
+      the disciplinary consequences of improper handling.
+
+      Version: 1.1, Last Updated: 2020-11-10
+    # A legal notice that, for any reason related to specific
+    # regulations, must be accessible only after users log in.
+    postLogin: ""
+  day0AdminUser:
+    admin:
+      secret: eric-pc-gateway-ldap-server-secret
+  tolerations:
+  - key: node.kubernetes.io/not-ready
+    operator: Exists
+    effect: NoExecute
+    tolerationSeconds: 60
+  - key: node.kubernetes.io/unreachable
+    operator: Exists
+    effect: NoExecute
+    tolerationSeconds: 0
+
+eric-sec-ldap-server:
+  enabled: true
+  replicaCount: 2
+  persistence:
+    size: 256Mi
+  ldap:
+    aum:
+      enabled: true
+  additionalEnv:
+  - name: LDAP_LOG_LEVEL
+    value: '256'
+  brAgent:
+    enabled: true
+    backupTypeList:
+    - DEFAULT
+  metrics:
+    enabled: false
+  tolerations:
+    ldapproxy:
+    - key: node.kubernetes.io/not-ready
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 60
+    - key: node.kubernetes.io/unreachable
+      operator: Exists
+      effect: NoExecute
+      tolerationSeconds: 0
+
+eric-sw-inventory-manager:
+  enabled: true
+
+m2m:
+  day0-user-json:
+
+eric-probe-event-report-broker:
+  enabled: true
+  ebm:
+    enabled: false
+  replicaCount: 2
+  env:
+    deploymentType: "pcg"
+    reporterPort: 8080
+  resources:
+    probeEventReportBroker:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 256Mi
+
+productInfoStatus: enabled
+
+## Labels
+labels: {}
